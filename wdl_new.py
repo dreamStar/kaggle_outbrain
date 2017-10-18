@@ -19,8 +19,21 @@ TRAIN_FILELIST = ["data_sample.csv"]
 VALID_FILELIST = ["data_sample.csv"]
 DES_FILENAME = "data_sample_des.csv"
 
+def read_data(filenames, col_names):
+    data = None
+    for f in filenames:
+        this_data = pd.read_csv(f, sep=',', usecols=col_names)
+        print('this data: %i' % this_data.size)
+        if not (data is None):
+            data = pd.concat([data, this_data])
+        else:
+            data = this_data
+    return data
+
 class WDL(object):
-    def __init__(self,model_dir,model_type,batch_size,train_epoches,dnn_lr,hidden_units,train_files,valid_files,des_file):
+    def __init__(self,model_dir,model_type,batch_size,train_epoches,dnn_lr,hidden_units,train_files,valid_files,des_file,data=None):
+        self.data=data
+
         self.model_dir = model_dir
         self.model_type = model_type
         self.batch_size = batch_size
@@ -35,12 +48,10 @@ class WDL(object):
         self.dnn_lr = dnn_lr
         self.write_params()
 
-
-        self.read_col_des(self.des_file)
+        #self.read_col_des(self.des_file)
+        self.read_feature_des(des_file)
         self.get_cols()
         self.build_estimator()
-
-
 
 
     def write_params(self):
@@ -63,98 +74,134 @@ class WDL(object):
             for (key,value) in params.items():
                 f.write("\t".join([key,str(value)])+'\n')
 
-
-
     # 读取特征描述文件
-    def read_col_des(self,filename):
-        self.col_name_all = []
-        self.col_name_all_without_label = []
-        self.col_name_in_use = []
-        self.col_val_default = []
-        self.col_val_default_without_label = []
-        self.col_des = {}
-        self.label_name = None
-        with open(filename,'r') as f:
-            for line in f:
-                print("des line:")
-                array = line.strip().split("\t")
-                print("array:")
-                print(array)
-                self.col_name_all.append(array[0])
+    def read_feature_des(self, filename):
+        df = pd.read_csv(filename, sep=';')
+        print('正在解析%i个特征描述' % len(df))
+        print(df)
 
-                if array[1] == "label":
-                    self.label_name = array[0]
-                    self.col_val_default.append([0])
-                    continue
-                else:
-                    self.col_name_all_without_label.append(array[0])
-
-                if array[2] != "true":
-                    self.col_des[array[0]] = {
-                        "type" : array[1],
-                        "enable" : False
-                    }
-                    self.col_val_default.append(0)
-                    self.col_val_default_without_label.append(0)
-                    continue
-
-                self.col_des[array[0]] = {
-                    "type" : array[1],
-                    "enable" : array[2] == "true",
-                    "model" : array[3],
-                    "method" : array[5],
-                    "param" : array[6],
-                    "embedding_size" : int(array[7])
-                }
+        self.col_des = df[df['enable']]
+        self.label_name = self.col_des[self.col_des['type'] == 'label']['name'].values[0]
 
 
+    # # 读取特征描述文件
+    # # 过时
+    # def read_col_des(self,filename):
+    #     self.col_name_all = []
+    #     self.col_name_all_without_label = []
+    #     self.col_name_in_use = []
+    #     self.col_val_default = []
+    #     self.col_val_default_without_label = []
+    #     self.col_des = {}
+    #     self.label_name = None
+    #     with open(filename,'r') as f:
+    #         for line in f:
+    #             print("des line:")
+    #             array = line.strip().split("\t")
+    #             print("array:")
+    #             print(array)
+    #             self.col_name_all.append(array[0])
+    #
+    #             if array[1] == "label":
+    #                 self.label_name = array[0]
+    #                 self.col_val_default.append([0])
+    #                 continue
+    #             else:
+    #                 self.col_name_all_without_label.append(array[0])
+    #
+    #             if array[2] != "true":
+    #                 self.col_des[array[0]] = {
+    #                     "type" : array[1],
+    #                     "enable" : False
+    #                 }
+    #                 self.col_val_default.append(0)
+    #                 self.col_val_default_without_label.append(0)
+    #                 continue
+    #
+    #             self.col_des[array[0]] = {
+    #                 "type" : array[1],
+    #                 "enable" : array[2] == "true",
+    #                 "model" : array[3],
+    #                 "method" : array[5],
+    #                 "param" : array[6],
+    #                 "embedding_size" : int(array[7])
+    #             }
+    #
+    #
+    #
+    #             if array[1] == "int":
+    #                 self.col_val_default.append([int(array[4])])
+    #                 self.col_val_default_without_label.append(tf.constant(int(array[4])))
+    #                 self.col_des[array[0]]["default"] = int(array[4])
+    #             elif array[1] == "float":
+    #                 self.col_val_default.append([float(array[4])])
+    #                 self.col_val_default_without_label.append(tf.constant(float(array[4])))
+    #                 self.col_des[array[0]]["default"] = float(array[4])
+    #             else:
+    #                 self.col_val_default.append([array[4]])
+    #                 self.col_val_default_without_label.append(tf.constant(array[4]))
+    #                 self.col_des[array[0]]["default"] = array[4]
+    #
+    #             if self.col_des[array[0]]["enable"] :
+    #                 self.col_name_in_use.append(array[0])
 
-                if array[1] == "int":
-                    self.col_val_default.append([int(array[4])])
-                    self.col_val_default_without_label.append(tf.constant(int(array[4])))
-                    self.col_des[array[0]]["default"] = int(array[4])
-                elif array[1] == "float":
-                    self.col_val_default.append([float(array[4])])
-                    self.col_val_default_without_label.append(tf.constant(float(array[4])))
-                    self.col_des[array[0]]["default"] = float(array[4])
-                else:
-                    self.col_val_default.append([array[4]])
-                    self.col_val_default_without_label.append(tf.constant(array[4]))
-                    self.col_des[array[0]]["default"] = array[4]
-
-                if self.col_des[array[0]]["enable"] :
-                    self.col_name_in_use.append(array[0])
-
-    # 构建列
     def get_cols(self):
         layers = tf.contrib.layers
         self.wide_cols = []
         self.deep_cols = []
+        col_des = self.col_des[self.col_des['type'] != 'label']
 
-        # 仅处理部分属性
-        for name in self.col_des:
-            col_attr = self.col_des[name]
-            if not col_attr["enable"]:
-                continue
-            if col_attr["type"] == "label":
-                continue
+        for i in xrange(len(col_des)):
+            feature = col_des.iloc[i]
+            if feature['model'] == 'wide' or feature['model'] == 'wdl':
 
-            if col_attr["model"] == "wide" or col_attr["model"] == "wdl" :
+                if feature['method'] == 'feed':
+                    self.wide_cols.append(layers. layers.real_valued_column(column_name=feature['name'], default_value=feature['param']))
+                elif feature['method'] == 'indexed':
+                    self.wide_cols.append(layers.sparse_column_with_integerized_feature(column_name=feature['name'],bucket_size=int(feature["param"])))
+                elif feature['method'] == 'hash':
+                    self.wide_cols.append(layers.sparse_column_with_hash_bucket(column_name=feature['name'], hash_bucket_size=int(feature['param']), combiner='sqrtn' ))
 
-                if col_attr["method"] == "indexed":
-                    self.wide_cols.append(layers.sparse_column_with_integerized_feature(column_name=name,bucket_size=int(col_attr["param"])))
-                elif col_attr["method"] == "feed":
-                    self.wide_cols.append(layers.real_valued_column(column_name=name, default_value=col_attr['default']))
+            if feature['model'] == 'deep' or feature['model'] == 'wdl':
+                if feature['method'] == 'feed':
+                    self.deep_cols.append(layers.real_valued_column(column_name=feature['name'], default_value=feature['param']))
+                elif feature['method'] == 'indexed':
+                    self.deep_cols.append(layers.embedding_column(layers.sparse_column_with_integerized_feature(column_name=feature['name'],bucket_size=int(feature["param"])),dimension=feature["embedding_size"]))
+                elif feature['method'] == 'hash':
+                    self.deep_cols.append(layers.embedding_column(layers.sparse_column_with_hash_bucket(column_name=feature['name'], hash_bucket_size=int(feature['param']), combiner='sqrtn'),dimension=feature["embedding_size"]))
+    # # 构建列
+    # # 过时
+    # def get_cols(self):
+    #     layers = tf.contrib.layers
+    #     self.wide_cols = []
+    #     self.deep_cols = []
+    #
+    #     # 仅处理部分属性
+    #     for name in self.col_des:
+    #         col_attr = self.col_des[name]
+    #         if not col_attr["enable"]:
+    #             continue
+    #         if col_attr["type"] == "label":
+    #             continue
+    #
+    #         if col_attr["model"] == "wide" or col_attr["model"] == "wdl" :
+    #
+    #             if col_attr["method"] == "indexed":
+    #                 self.wide_cols.append(layers.sparse_column_with_integerized_feature(column_name=name,bucket_size=int(col_attr["param"])))
+    #             elif col_attr["method"] == "feed":
+    #                 self.wide_cols.append(layers.real_valued_column(column_name=name, default_value=col_attr['default']))
+    #
+    #         if col_attr["model"] == "deep" or col_attr["model"] == "wdl" :
+    #
+    #             if col_attr["method"] == "indexed":
+    #                 self.deep_cols.append(layers.embedding_column(layers.sparse_column_with_integerized_feature(column_name=name,bucket_size=int(col_attr["param"])),dimension=col_attr["embedding_size"]))
+    #             elif col_attr["method"] == "feed":
+    #                 self.wide_cols.append(layers.real_valued_column(column_name=name, default_value=col_attr['default']))
+    #
+    #
 
-            if col_attr["model"] == "deep" or col_attr["model"] == "wdl" :
 
-                if col_attr["method"] == "indexed":
-                    self.deep_cols.append(layers.embedding_column(layers.sparse_column_with_integerized_feature(column_name=name,bucket_size=int(col_attr["param"])),dimension=col_attr["embedding_size"]))
-                elif col_attr["method"] == "feed":
-                    self.wide_cols.append(layers.real_valued_column(column_name=name, default_value=col_attr['default']))
-
-
-        # 建立预测器
+    # 建立预测器
     def build_estimator(self):
         """Build an estimator."""
         save_ckpt = int(self.save_ckpt_interval / self.batch_size)
@@ -164,7 +211,7 @@ class WDL(object):
             self.model = tf.contrib.learn.LinearClassifier(
                 model_dir=self.model_dir,
                 feature_columns=self.wide_cols,
-                config=tf.contrib.learn.RunConfig(gpu_memory_fraction = 0.6, log_device_placement=True,save_summary_steps=save_summary, save_checkpoints_steps=save_ckpt,save_checkpoints_secs=None)
+                config=tf.contrib.learn.RunConfig(gpu_memory_fraction = 0.6, log_device_placement=False,save_summary_steps=save_summary, save_checkpoints_steps=save_ckpt,save_checkpoints_secs=None)
             )
         elif self.model_type == "deep":
             self.model = tf.contrib.learn.DNNClassifier(
@@ -172,7 +219,7 @@ class WDL(object):
                 feature_columns=self.deep_cols,
                 hidden_units=self.hidden_units,
                 optimizer=tf.train.AdagradOptimizer(self.dnn_lr),
-                config=tf.contrib.learn.RunConfig(gpu_memory_fraction = 0.6, log_device_placement=True,save_summary_steps=save_summary, save_checkpoints_steps=save_ckpt,save_checkpoints_secs=None)
+                config=tf.contrib.learn.RunConfig(gpu_memory_fraction = 0.6, log_device_placement=False,save_summary_steps=save_summary, save_checkpoints_steps=save_ckpt,save_checkpoints_secs=None)
             )
         else:
             self.model = tf.contrib.learn.DNNLinearCombinedClassifier(
@@ -181,130 +228,136 @@ class WDL(object):
                 dnn_feature_columns=self.deep_cols,
                 dnn_hidden_units=self.hidden_units,
                 dnn_optimizer=tf.train.AdagradOptimizer(self.dnn_lr),
-                config=tf.contrib.learn.RunConfig(gpu_memory_fraction = 0.6, log_device_placement=True,save_summary_steps=save_summary, save_checkpoints_steps=save_ckpt,save_checkpoints_secs=None)
+                config=tf.contrib.learn.RunConfig(gpu_memory_fraction = 0.6, log_device_placement=False,save_summary_steps=save_summary, save_checkpoints_steps=save_ckpt,save_checkpoints_secs=None)
             )
         return
 
 
-    # 数据读取操作符
-    def read_my_file_format(self,filename_queue,col_names, defaults):
-        reader = tf.TextLineReader()
-        key, record_string = reader.read(filename_queue)
+    # # 数据读取操作符
+    # def read_my_file_format(self,filename_queue,col_names, defaults):
+    #     reader = tf.TextLineReader()
+    #     key, record_string = reader.read(filename_queue)
+    #
+    #     cols = tf.decode_csv(record_string, record_defaults = defaults)
+    #
+    #     #cols = tf.decode_csv(record_string )
+    #     record = dict([(col_names[i],cols[i]) for i in xrange(len(cols))])
+    #
+    #     return record
 
-        cols = tf.decode_csv(record_string, record_defaults = defaults )
 
-        #cols = tf.decode_csv(record_string )
-        record = dict([(col_names[i],cols[i]) for i in xrange(len(cols))])
+    # # 数据预处理
+    # def preprocess(self, record, labeled):
+    #     if not labeled :
+    #         features = record
+    #         return features
+    #
+    #     col_name = self.col_des[self.col_des['type'] != 'label']['name'].values.tolist()
+    #     label_name = self.col_des[self.col_des['type'] == 'label']['name'].values.tolist()[0]
+    #
+    #     features = dict([(col_name[i], record[col_name[i]]) for i in xrange(len(col_name)) ])
+    #     labels = {label_name:record[label_name]}
+    #     return features,labels
 
-        return record
+    # # 建立读取管道
+    # def input_pipeline(self,type):
+    #     if type == "train":
+    #         filenames = self.train_files
+    #         col_names = self.col_name_all
+    #         defaults = self.col_val_default
+    #         epoches = self.train_epoches
+    #         labeled = True
+    #         min_after_dequeue = 10000
+    #         batch_size = self.batch_size
+    #     elif type == "valid":
+    #         filenames = self.valid_files
+    #         col_names = self.col_name_all
+    #         defaults = self.col_val_default
+    #         epoches = 1
+    #         labeled = True
+    #         batch_size = 10000
+    #         min_after_dequeue = 0
+    #     elif type == "predict":
+    #         filenames = self.predict_files
+    #         col_names = self.col_name_all_without_label
+    #         defaults = self.col_val_default_without_label
+    #         epoches = 1
+    #         labeled = False
+    #         min_after_dequeue = 0
+    #         batch_size = 100000
+    #
+    #
+    #     # 创建文件名队列
+    #     filename_queue = tf.train.string_input_producer( filenames, num_epochs=epoches, shuffle=True )
+    #
+    #     record = self.read_my_file_format(filename_queue,col_names,defaults)
+    #
+    #     features,labels = self.preprocess(record,labeled)
+    #
+    #     # min_after_dequeue defines how big a buffer we will randomly sample
+    #     #   from -- bigger means better shuffling but slower start up and more
+    #     #   memory used.
+    #     # capacity must be larger than min_after_dequeue and the amount larger
+    #     #   determines the maximum we will prefetch.  Recommendation:
+    #     #   min_after_dequeue + (num_threads + a small safety margin) * batch_size
+    #
+    #     capacity = min_after_dequeue + 3 * batch_size
+    #     if labeled:
+    #         features = dict(features, **labels )
+    #     else:
+    #         features = features
+    #
+    #     batched = tf.train.shuffle_batch(
+    #         features, batch_size=batch_size, capacity=capacity,
+    #         min_after_dequeue=min_after_dequeue)
+    #
+    #
+    #     if labeled:
+    #         label_batch = batched.pop(self.label_name)
+    #         return batched,label_batch
+    #     else:
+    #         return batched
 
 
-    # 数据预处理
-    def preprocess(self, record, labeled):
-        if not labeled :
-            features = record
-            return features
-
-        features = dict([(self.col_name_in_use[i], record[self.col_name_in_use[i]]) for i in xrange(len(self.col_name_in_use)) if self.col_name_in_use[i] != self.label_name])
-        labels = {self.label_name:record[self.label_name]}
-        return features,labels
-
-    # 建立读取管道
-    def input_pipeline(self,type):
+    def input_pandas_queue(self, type):
         if type == "train":
             filenames = self.train_files
-            col_names = self.col_name_all
-            defaults = self.col_val_default
+            col_names = self.col_des['name'].values.tolist()
+            # defaults = self.col_val_default
             epoches = self.train_epoches
             labeled = True
-            min_after_dequeue = 10000
             batch_size = self.batch_size
+            shuffle = True
         elif type == "valid":
             filenames = self.valid_files
-            col_names = self.col_name_all
-            defaults = self.col_val_default
+            col_names = self.col_des['name'].values.tolist()
+            # defaults = self.col_val_default
             epoches = 1
+            shuffle = False
             labeled = True
-            batch_size = 10000
-            min_after_dequeue = 0
+            batch_size = 100
         elif type == "predict":
             filenames = self.predict_files
-            col_names = self.col_name_all_without_label
-            defaults = self.col_val_default_without_label
+            col_names = self.col_des[self.col_des['type'] != 'label']['name'].values.tolist()
+            # defaults = self.col_val_default_without_label
             epoches = 1
             labeled = False
-            min_after_dequeue = 0
-            batch_size = 100000
+            shuffle = False
+            # min_after_dequeue = 0
+            batch_size = 100
 
-
-        # 创建文件名队列
-        filename_queue = tf.train.string_input_producer( filenames, num_epochs=epoches, shuffle=True )
-
-        record = self.read_my_file_format(filename_queue,col_names,defaults)
-
-        features,labels = self.preprocess(record,labeled)
-
-        # min_after_dequeue defines how big a buffer we will randomly sample
-        #   from -- bigger means better shuffling but slower start up and more
-        #   memory used.
-        # capacity must be larger than min_after_dequeue and the amount larger
-        #   determines the maximum we will prefetch.  Recommendation:
-        #   min_after_dequeue + (num_threads + a small safety margin) * batch_size
-
-        capacity = min_after_dequeue + 3 * batch_size
-        if labeled:
-            features = dict(features, **labels )
-        else:
-            features = features
-
-        batched = tf.train.shuffle_batch(
-            features, batch_size=batch_size, capacity=capacity,
-            min_after_dequeue=min_after_dequeue)
-
-
-        if labeled:
-            label_batch = batched.pop(self.label_name)
-            return batched,label_batch
-        else:
-            return batched
-
-
-    def input_pandas_queue(self,type):
-        if type == "train":
-            filenames = self.train_files
-            col_names = self.col_name_all
-            defaults = self.col_val_default
-            epoches = self.train_epoches
-            labeled = True
-            min_after_dequeue = 10000
-            batch_size = self.batch_size
-        elif type == "valid":
-            filenames = self.valid_files
-            col_names = self.col_name_all
-            defaults = self.col_val_default
-            epoches = 1
-            labeled = True
-            batch_size = 10000
-            min_after_dequeue = 0
-        elif type == "predict":
-            filenames = self.predict_files
-            col_names = self.col_name_all_without_label
-            defaults = self.col_val_default_without_label
-            epoches = 1
-            labeled = False
-            min_after_dequeue = 0
-            batch_size = 100000
+        # data = read_data(filenames, col_names)
 
         data = None
-        cols = col_names
         for f in filenames:
-            this_data = pd.read_csv(f, sep=',', header=None, names=cols)
+            this_data = pd.read_csv(f, sep=',', usecols=col_names)
             print('this data: %i' % this_data.size)
-            if data :
+            if not (data is None):
                 data = pd.concat([data, this_data])
             else:
                 data = this_data
-        print('data size: %i' % data.size)
+
+        print('pipline type:%s' % type)
 
         # data = {k: tf.constant(data[k].values) for k in col_names}
         # feature_cols_batch = tf.train.shuffle_batch(data, batch_size=batch_size,capacity=1000,
@@ -315,15 +368,30 @@ class WDL(object):
         #
         # return feature_cols_batch, label_batch
 
-        steps = int(math.floor(data.size + batch_size - 1 / batch_size))
-        for i in xrange(epoches):
-            print('epoche %i' % i)
-            data = data.reindex(np.random.permutation(data.index))
-            for step in xrange(steps):
-                indexes = range(batch_size*step, min(data.size, batch_size * (step + 1)))
-                data_slice = data.iloc[indexes]
-                yield {k: tf.constant(data_slice[k].values) for k in self.col_name_all_without_label}, tf.constant(data_slice[self.label_name].astype('int'))
+        # features = self.col_des[self.col_des['type'] != 'label']['name'].values.tolist()
+        #
+        # steps = int(math.floor(data.size + batch_size - 1 / batch_size))
+        # for i in xrange(epoches):
+        #     print('epoche %i' % i)
+        #     data = data.sample(frac=1).reset_index(drop=True)
+        #     for step in xrange(steps):
+        #         indexes = range(batch_size*step, min(data.size, batch_size * (step + 1)))
+        #         data_slice = data.iloc[indexes]
+        #         print(data_slice[self.label_name].values.astype('int'))
+        #
+        #         yield {k: tf.constant(data_slice[k].values) for k in features}, tf.constant(data_slice[self.label_name].values.astype('int'))
 
+        if labeled:
+            return tf.contrib.learn.io.pandas_input_fn(x=data[[key for key in self.col_des[self.col_des['type'] != 'label']['name']]],
+                                                   y=data[self.label_name],
+                                                   num_epochs=epoches,
+                                                   batch_size=batch_size,
+                                                   shuffle=shuffle)
+        else:
+            return tf.contrib.learn.io.pandas_input_fn(x=data[[key for key in self.col_des[self.col_des['type'] != 'label']['name']]],
+                                                   num_epochs=epoches,
+                                                   batch_size=batch_size,
+                                                   shuffle=shuffle)
 
 
     # 训练和测试
@@ -333,9 +401,13 @@ class WDL(object):
 
         eval_step = int(self.eval_sample_interval / self.batch_size)
 
+        # def input_fn_train():
+        #     print('input_fn_train called!')
+        #     return self.input_pandas_queue('train')
+
         validation_monitor = tf.contrib.learn.monitors.ValidationMonitor(
-            input_fn = lambda :self.input_pipeline('valid'),
-            eval_steps=50,
+            input_fn = self.input_pandas_queue('valid'),
+            # eval_steps=50,
             every_n_steps=eval_step
         )
 
@@ -352,7 +424,8 @@ class WDL(object):
         # 训练模型
         self.model.fit(
             #input_fn=lambda: self.input_pipeline('train'),
-            input_fn=lambda: self.input_pandas_queue('train'),
+            # input_fn=lambda: self.input_pandas_queue('train'),
+            input_fn=self.input_pandas_queue('train'),
             monitors=monitors
         )
 
@@ -361,7 +434,8 @@ class WDL(object):
 
     def eval(self):
         print("begin to evaluate................")
-        self.model.evaluate(input_fn=lambda : self.input_pipeline('valid'))
+        # self.model.evaluate(input_fn=lambda : self.input_pipeline('valid'))
+        self.model.evaluate(input_fn=self.input_pandas_queue('valid'))
 
 
 
@@ -373,11 +447,14 @@ class WDL(object):
 
 if __name__ == "__main__":
     #wdl = WDL('./model/samples','wdl',5,3,[500,500,500],TRAIN_FILELIST,VALID_FILELIST,DES_FILENAME)
-    train_list = ['./data/train_p_e_m_t_c.csv']
-    valid_list = ['./data/valid_p_e_m_t_c.csv']
+    #train_list = ['./data/train_p_e_m_t_c.csv']
+    #valid_list = ['./data/valid_p_e_m_t_c.csv']
     #train_list = ['./data/test.csv']
     #valid_list = ['./data/test.csv']
-    wdl = WDL('./data/trail15','deep',100,2,0.1,[500,250,250],train_list,valid_list,'./data/click_event_promoted_topic_category_des.csv')
+    train_list = ['./data/feature_train_splited.0.csv']
+    valid_list = ['./data/feature_train_splited.4.csv']
+    des_file = './data/feature_des.csv'
+    wdl = WDL('./data/trail_test7','wdl',200,10,0.1,[500,250,250],train_list,valid_list,des_file)
     wdl.run(True)
 
 

@@ -156,7 +156,7 @@ def merge_feature(dir, table1, table2, out, chunk_size=10000000):
         print('处理第%i个chunk' % i)
         data_out = pd.merge(data1, data2, how='left')
         if first_line:
-            data_out.to_csv(file_out, index=False, mode='a')
+            data_out.to_csv(file_out, index=False)
             first_line = False
         else:
             data_out.to_csv(file_out, index=False, mode='a', header=False)
@@ -384,7 +384,7 @@ def generate_event_feature(dir):
 
     events = pd.read_csv(os.path.join(dir, 'events_processed.csv'))
     events.rename(columns={'document_id':'document_id_view'}, inplace=True)
-    events.to_csv(os.path.join(dir,'events_feature.csv'), index=False)
+    events.to_csv(os.path.join(dir,'feature_events.csv'), index=False)
 
 # 生成document侧特征
 def generate_document_feature(dir):
@@ -395,6 +395,7 @@ def generate_document_feature(dir):
     documents_meta = pd.read_csv(os.path.join(dir, 'documents_meta_processed.csv'))
 
     merged = pd.merge(document_ids, documents_meta)
+    merged.drop_duplicates(['document_id'], inplace=True)
 
     fillna_dict = {
         'source_id': documents_meta['source_id'].mode().iloc[0],
@@ -402,10 +403,16 @@ def generate_document_feature(dir):
         'publish_time': documents_meta['publish_time'].mode().iloc[0],
     }
 
-    merged.rename(columns={'document_id':'document_id_view'}, inplace=True)
+    cols_rename = {
+        'document_id' : 'document_id_view',
+        'source_id' : 'source_id_view',
+        'publisher_id' : 'publisher_id_view',
+        'publish_time' : 'publish_time_view',
+    }
+    merged.rename(columns=cols_rename, inplace=True)
 
     merged.fillna(fillna_dict, inplace=True)
-    merged.to_csv(os.path.join(dir, 'documents_feature.csv'), index=False)
+    merged.to_csv(os.path.join(dir, 'feature_documents.csv'), index=False)
 
 
 # 生成ad侧特征
@@ -429,8 +436,14 @@ def generate_promoted_feature(dir):
         'publish_time': documents_meta['publish_time'].mode().iloc[0]
     }
     merged.fillna(fillna_dict, inplace=True)
-    merged.rename(columns={'document_id':'document_id_ad'}, inplace=True)
-    merged.to_csv(os.path.join(dir, 'promoted_feature.csv'), index=False)
+    cols_rename = {
+        'document_id' : 'document_id_ad',
+        'source_id' : 'source_id_ad',
+        'publisher_id' : 'publisher_id_ad',
+        'publish_time' : 'publish_time_ad',
+    }
+    merged.rename(columns=cols_rename, inplace=True)
+    merged.to_csv(os.path.join(dir, 'feature_promoted.csv'), index=False)
 
 
 # 生成document-ad特征
@@ -443,7 +456,7 @@ def generate_document_promoted_feature(dir):
     make_similar('./data','document_pair.csv','documents_topics_ex.csv','topic_similar','tmp_topic_similar.csv',10000)
 
     print('合并document-ad特征')
-    merge_feature('./data', 'tmp_topic_similar.csv', 'tmp_category_similar.csv', 'document_ad_feature.csv', 100000)
+    merge_feature('./data', 'tmp_topic_similar.csv', 'tmp_category_similar.csv', 'feature_document_ad.csv', 100000)
 
 
 ################################################
@@ -451,22 +464,22 @@ def generate_document_promoted_feature(dir):
 
 def merge_features(dir):
     print('合并各部分特征')
-    # merge_feature('./data', 'clicks_train.csv', 'events_feature.csv', 'tmp_click_train_events.csv', 200000)
+    merge_feature('./data', 'clicks_train.csv', 'feature_events.csv', 'tmp_click_train_events.csv', 200000)
     gc.collect()
-    merge_feature('./data', 'tmp_click_train_events.csv', 'documents_feature.csv', 'tmp_click_train_events_documents.csv', 5000)
+    merge_feature('./data', 'tmp_click_train_events.csv', 'feature_documents.csv', 'tmp_click_train_events_documents.csv', 1000000)
     gc.collect()
-    merge_feature('./data', 'tmp_click_train_events_documents.csv', 'promoted_feature.csv', 'tmp_click_train_events_documents_promoted.csv', 10000)
+    merge_feature('./data', 'tmp_click_train_events_documents.csv', 'feature_promoted.csv', 'tmp_click_train_events_documents_promoted.csv', 1000000)
     gc.collect()
-    merge_feature('./data', 'tmp_click_train_events_documents_promoted.csv', 'document_ad_feature.csv', 'feature_train.csv', 10000)
+    merge_feature('./data', 'tmp_click_train_events_documents_promoted.csv', 'feature_document_ad.csv', 'feature_train.csv', 1000000)
     gc.collect()
 
-    merge_feature('./data', 'clicks_test.csv', 'events_feature.csv', 'tmp_click_test_events.csv', 100000)
+    merge_feature('./data', 'clicks_test.csv', 'feature_events.csv', 'tmp_click_test_events.csv', 1000000)
     gc.collect()
-    merge_feature('./data', 'tmp_click_test_events.csv', 'documents_feature.csv', 'tmp_click_test_events_documents.csv', 5000)
+    merge_feature('./data', 'tmp_click_test_events.csv', 'feature_documents.csv', 'tmp_click_test_events_documents.csv', 1000000)
     gc.collect()
-    merge_feature('./data', 'tmp_click_test_events_documents.csv', 'promoted_feature.csv', 'tmp_click_test_events_documents_promoted.csv', 10000)
+    merge_feature('./data', 'tmp_click_test_events_documents.csv', 'feature_promoted.csv', 'tmp_click_test_events_documents_promoted.csv', 1000000)
     gc.collect()
-    merge_feature('./data', 'tmp_click_test_events_documents_promoted.csv', 'document_ad_feature.csv', 'feature_train.csv', 10000)
+    merge_feature('./data', 'tmp_click_test_events_documents_promoted.csv', 'feature_document_ad.csv', 'feature_test.csv', 1000000)
     gc.collect()
 
 ################################################
@@ -474,9 +487,8 @@ def merge_features(dir):
 
 def split_data(dir, feature_file, out_file, bins=5):
     file = os.path.join(dir, feature_file)
-    out_files = []
-    for i in xrange(bins):
-        out_files.append(os.path.join(dir, out_file+str(i)))
+    tmp_name = out_file.split('.')
+    out_files = [ os.path.join(dir, '.'.join( tmp_name[0:1] + [str(i)] + tmp_name[1:] )) for i in xrange(bins) ]
 
     def _split_index(index_range):
         index_list = range(index_range)
@@ -485,7 +497,12 @@ def split_data(dir, feature_file, out_file, bins=5):
         index_bins = [ index_list[i*interval: (i+1)*interval] for i in xrange(bins) ]
         return index_bins
 
-    df_iter = pd.read_csv(file, chunksize=500000)
+    df_iter = pd.read_csv(file, chunksize=1000000)
+
+    first_line = True
+    for out_file in out_files:
+        if os.path.exists(out_file):
+            os.remove(out_file)
 
     for df in df_iter:
         samples = []
@@ -496,10 +513,11 @@ def split_data(dir, feature_file, out_file, bins=5):
         p_bins = _split_index(p_cnt)
         for i, bin in enumerate(p_bins):
             p_sample = df.iloc[bin]
-            if len(samples) < i:
+            if len(samples) <= i:
                 samples.append(p_sample)
             else:
                 samples[i] = pd.concat([samples[i], p_sample])
+            print('p_samples[%i] size:%i' %(i,len(samples[i])))
 
 
         df_n = df[df['clicked'] == 0]
@@ -508,14 +526,23 @@ def split_data(dir, feature_file, out_file, bins=5):
         n_bins = _split_index(n_cnt)
         for i, bin in enumerate(n_bins):
             n_sample = df.iloc[bin]
-            if len(samples) < i:
+            if len(samples) <= i:
                 samples.append(n_sample)
             else:
                 samples[i] = pd.concat([samples[i], n_sample])
+            print('all_samples[%i] size:%i' %(i,len(samples[i])))
 
         for i, sample in enumerate(samples):
             sample = sample.sample(frac=1).reset_index(drop=True)
-            sample.to_csv(out_files[i], index=False)
+            print('sample %i size:%i' %(i, len(sample)))
+            print('out file:%s' % out_files[i])
+            if first_line:
+                print('正在向%s写入首行数据'% out_files[i])
+                sample.to_csv(out_files[i], index=False, mode='a')
+            else:
+                print('正在向%s写入后续数据'% out_files[i])
+                sample.to_csv(out_files[i], index=False, mode='a', header=False)
+        first_line = False
 
 
 
@@ -591,8 +618,11 @@ def data_process(dir):
     # generate_document_promoted_feature(dir)
     # generate_promoted_feature(dir)
 
-    # step4. 合并各特征
-    merge_features(dir)
+    # # step4. 合并各特征
+    # merge_features(dir)
+
+    # step5. 划分数据集
+    split_data(dir, 'feature_train.csv', 'feature_train_splited.csv')
 
 
 if __name__ == '__main__':
