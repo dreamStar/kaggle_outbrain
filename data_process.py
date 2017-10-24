@@ -549,8 +549,19 @@ def split_data(dir, feature_file, out_file, bins=5):
 
 
 ################################################
-# 输出符合tensorflow的特征
+# 输出符合tensorflow格式的特征
 
+def _read_feature_des(dir, des_filename):
+    des_file = os.path.join(dir, des_filename)
+    des = pd.read_csv(des_file,';')
+
+    col_with_label = des[des['enable']]['name'].values.tolist()
+    col_with_label.sort()
+
+    col_without_label = des[des['enable']][des['type'] != 'label']['name'].values.tolist()
+    col_without_label.sort()
+
+    return col_with_label, col_without_label
 
 def write_for_tf(dir, filename, outname, cols):
     in_file = os.path.join(dir, filename)
@@ -559,26 +570,30 @@ def write_for_tf(dir, filename, outname, cols):
     if os.path.exists(out_file):
         os.remove(out_file)
 
+
     chunk_size = 10000000
 
     data_iter = pd.io.parsers.read_csv(in_file, usecols=cols, chunksize=chunk_size)
 
     for (i,data) in enumerate(data_iter):
         print('正在转写第%i块记录' % i)
-        data.to_csv(out_file, mode='a', index=False, header=True, columns=cols)
+        data.to_csv(out_file, mode='a', index=False, header=False, columns=cols)
 
     print("finished writing")
 
 
-def generate_feeding_data(dir, files):
-    print('输出训练数据')
-    cols_train = []
-    for file in files:
-        write_for_tf(dir, file, 'tf_'+file, cols_train)
+def generate_feeding_data(dir, train_files=None, test_files=None):
+    cols_train, cols_test = _read_feature_des(dir,'feature_des.csv')
 
-    print('输出预测数据')
-    cols_test = []
-    write_for_tf(dir, 'feature_test.csv', 'tf_feature_test.csv', cols_test)
+    if train_files:
+        print('输出训练数据')
+        for file in train_files:
+            write_for_tf(dir, file, 'tf_'+file, cols_train)
+
+    if test_files:
+        print('输出预测数据')
+        for file in test_files:
+            write_for_tf(dir, file, 'tf_'+file, cols_test)
 
 
 
@@ -621,9 +636,11 @@ def data_process(dir):
     # # step4. 合并各特征
     # merge_features(dir)
 
-    # step5. 划分数据集
-    split_data(dir, 'feature_train.csv', 'feature_train_splited.csv')
+    # # step5. 划分数据集
+    # split_data(dir, 'feature_train.csv', 'feature_train_splited.csv')
 
+    # step6. 转写数据集
+    generate_feeding_data(dir, ['feature_train_splited.0.csv','feature_train_splited.1.csv','feature_train_splited.2.csv','feature_train_splited.3.csv','feature_train_splited.4.csv'])
 
 if __name__ == '__main__':
     data_process('./data')
