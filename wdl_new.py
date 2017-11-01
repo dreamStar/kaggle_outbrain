@@ -20,6 +20,9 @@ TRAIN_FILELIST = ["data_sample.csv"]
 VALID_FILELIST = ["data_sample.csv"]
 DES_FILENAME = "data_sample_des.csv"
 
+def make_filepath(dir, files):
+    return map(lambda file: os.path.join(dir,file), files)
+
 def read_data(filenames, col_names):
     data = None
     for f in filenames:
@@ -32,17 +35,17 @@ def read_data(filenames, col_names):
     return data
 
 class WDL(object):
-    def __init__(self,model_dir,model_type,batch_size,train_epoches,dnn_lr,hidden_units,train_files,valid_files,des_file,cross_des_file = None, data=None):
-        self.data=data
-
-        self.model_dir = model_dir
+    def __init__(self, dir, model_dir,model_type,batch_size,train_epoches,dnn_lr,hidden_units,des_file,cross_des_file = None, data=None):
+        self.data = data
+        self.dir = dir
+        self.model_dir = os.path.join(dir, model_dir)
         self.model_type = model_type
         self.batch_size = batch_size
         self.train_epoches = train_epoches
-        self.train_files = train_files
-        self.valid_files = valid_files
-        self.des_file = des_file
-        self.cross_des_file = cross_des_file
+        # self.train_files = train_files
+        # self.valid_files = valid_files
+        self.des_file = os.path.join(dir, des_file)
+        self.cross_des_file = os.path.join(dir, cross_des_file)
         self.hidden_units = hidden_units
         self.eval_sample_interval = 50000000
         self.save_ckpt_interval = 1000000
@@ -64,8 +67,8 @@ class WDL(object):
             "modle_type" : self.model_type,
             "batch_size" : self.batch_size,
             "train_epoches" : self.train_epoches,
-            "train_files" : self.train_files,
-            "valid_files" : self.valid_files,
+            # "train_files" : self.train_files,
+            # "valid_files" : self.valid_files,
             "des_file" : self.des_file,
             "hidden_units" : self.hidden_units,
             "eval_sample_interval" : self.eval_sample_interval,
@@ -259,9 +262,10 @@ class WDL(object):
         return features,labels
 
     # 建立读取管道
-    def input_pipeline(self,type):
+    def input_pipeline(self, files, type):
+        filenames = make_filepath(self.dir, files)
         if type == "train":
-            filenames = self.train_files
+            # filenames = self.train_files
             col_names = self.col_name_sorted_with_label
             defaults = self.defaults_with_label
             epoches = self.train_epoches
@@ -270,7 +274,7 @@ class WDL(object):
             min_after_dequeue = 10000
             shuffle = True
         elif type == "valid":
-            filenames = self.valid_files
+            # filenames = self.valid_files
             col_names = self.col_name_sorted_with_label
             defaults = self.defaults_with_label
             epoches = 1
@@ -279,7 +283,7 @@ class WDL(object):
             labeled = True
             batch_size = self.valid_batch_size
         elif type == "predict":
-            filenames = self.predict_files
+            # filenames = self.predict_files
             col_names = self.col_name_sorted_without_label
             defaults = self.defaults_without_label
             epoches = 1
@@ -326,7 +330,7 @@ class WDL(object):
 
 
     # 训练和测试
-    def train(self,profiling = False):
+    def train(self, train_files, valid_files, profiling = False):
         #print("model dir: %s" % model_dir)
         monitors = []
 
@@ -338,7 +342,7 @@ class WDL(object):
 
         validation_monitor = tf.contrib.learn.monitors.ValidationMonitor(
             #input_fn = self.input_pandas_queue('valid'),
-            input_fn = lambda :self.input_pipeline('valid'),
+            input_fn = lambda :self.input_pipeline(valid_files, 'valid'),
             eval_steps=self.valid_sum/self.valid_batch_size,
             every_n_steps=eval_step
         )
@@ -359,24 +363,28 @@ class WDL(object):
             # x = self.input_pandas_queue_x('train'),
             # y = self.input_pandas_queue_y('train'),
             # batch_size = self.batch_size,
-            input_fn= lambda : self.input_pipeline('train'),
+            input_fn= lambda : self.input_pipeline(train_files, 'train'),
             monitors=monitors
         )
 
 
         return
 
-    def eval(self):
+    def eval(self,files):
         print("begin to evaluate................")
-        self.model.evaluate(input_fn=lambda : self.input_pipeline('valid'))
+        self.model.evaluate(input_fn=lambda : self.input_pipeline(files, 'valid'))
         # self.model.evaluate(input_fn=self.input_pandas_queue('valid'))
 
+    def predict(self, files):
+        print('begin to predict.................')
+        yield self.model.predict(
+            input_fn= lambda : self.input_pipeline(files, 'predict')
+        )
 
-
-    def run(self,profiling):
+    def run(self, train_files, valid_files, profiling):
         print("begin to run")
-        self.train(profiling)
-        self.eval()
+        self.train(train_files, valid_files, profiling)
+        # self.eval()
         print("run finished")
 
 if __name__ == "__main__":
@@ -385,12 +393,13 @@ if __name__ == "__main__":
     #valid_list = ['./data/valid_p_e_m_t_c.csv']
     #train_list = ['./data/test.csv']
     #valid_list = ['./data/test.csv']
-    train_list = ['./data/tf_feature_train_splited.0.csv','./data/tf_feature_train_splited.1.csv','./data/tf_feature_train_splited.2.csv','./data/tf_feature_train_splited.3.csv']
-    valid_list = ['./data/tf_feature_train_splited.4.csv']
-    des_file = './data/feature_des.csv'
-    cross_des_file = './data/feature_cross_des.csv'
-    wdl = WDL('./data/trail16','wdl',300,2,0.1,[500,250,250],train_list,valid_list,des_file,cross_des_file)
-    wdl.run(True)
+    train_list = ['tf_feature_train_splited.0.csv','tf_feature_train_splited.1.csv','tf_feature_train_splited.2.csv','tf_feature_train_splited.3.csv']
+    valid_list = ['tf_feature_train_splited.4.csv']
+    des_file = 'feature_des.csv'
+    cross_des_file = 'feature_cross_des.csv'
+    wdl = WDL('./data','trail16','wdl',300,2,0.1,[500,250,250],des_file,cross_des_file)
+    # wdl.run(True)
+
 
 
 

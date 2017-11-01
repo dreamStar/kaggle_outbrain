@@ -640,7 +640,8 @@ def data_process(dir):
     # split_data(dir, 'feature_train.csv', 'feature_train_splited.csv')
 
     # step6. 转写数据集
-    generate_feeding_data(dir, ['feature_train_splited.0.csv','feature_train_splited.1.csv','feature_train_splited.2.csv','feature_train_splited.3.csv','feature_train_splited.4.csv'])
+    # generate_feeding_data(dir, train_files= ['feature_train_splited.0.csv','feature_train_splited.1.csv','feature_train_splited.2.csv','feature_train_splited.3.csv','feature_train_splited.4.csv'])
+    generate_feeding_data(dir, test_files=['feature_test.csv'])
 
 if __name__ == '__main__':
     data_process('./data')
