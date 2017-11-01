@@ -57,7 +57,7 @@ class WDL(object):
         self.write_params()
 
         #self.read_col_des(self.des_file)
-        self.read_feature_des(des_file, cross_des_file)
+        self.read_feature_des(self.des_file, self.cross_des_file)
         self.get_cols()
         self.build_estimator()
 
